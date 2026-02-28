@@ -4,26 +4,26 @@ import { useState, useEffect, useRef, useCallback } from "react";
 const INITIAL_STATE = {
   user: { name: "Alex Chen", initials: "AC", kyc: "approved", tier: "Premium" },
   balances: {
-    ETH:  { amount: 1.842,   ltv: 0.90, color: "#627EEA", icon: "Ξ" },
-    BTC:  { amount: 0.0512,  ltv: 0.85, color: "#F7931A", icon: "₿" },
-    USDM: { amount: 2341.80, ltv: 1.00, color: "#ADFA1D", icon: "◈" },
-    SOL:  { amount: 12.4,    ltv: 0.80, color: "#9945FF", icon: "◎" },
+    ETH:  { amount: 1.842,   weight: 0.90, color: "#627EEA", icon: "Ξ" },
+    BTC:  { amount: 0.0512,  weight: 0.85, color: "#F7931A", icon: "₿" },
+    USDM: { amount: 2341.80, weight: 1.00, color: "#ADFA1D", icon: "◈" },
+    SOL:  { amount: 12.4,    weight: 0.80, color: "#9945FF", icon: "◎" },
   },
-  yieldData: {
-    apy: 5.42, deployed: 7800.00, earnedToday: 1.156, earnedMonth: 32.44,
-    strategies: [
-      { name: "Aave v3",     protocol: "Aave", apy: 5.2, allocation: 65, balance: 5070, risk: "Low" },
-      { name: "Teko Stable", protocol: "Teko", apy: 6.8, allocation: 25, balance: 1950, risk: "Low" },
-      { name: "USDm Native", protocol: "USDm", apy: 4.9, allocation: 10, balance: 780,  risk: "Lowest" },
+  savingsData: {
+    apy: 5.42, saved: 7800.00, earnedToday: 1.156, earnedMonth: 32.44,
+    plans: [
+      { name: "High Yield Savings", apy: 5.2, allocation: 65, balance: 5070, risk: "Low" },
+      { name: "Stable Growth",      apy: 6.8, allocation: 25, balance: 1950, risk: "Low" },
+      { name: "Core Savings",       apy: 4.9, allocation: 10, balance: 780,  risk: "Lowest" },
     ],
   },
   credit: { outstandingDebt: 1240.00, dailySpent: 87.50, dailyLimit: 500.00 },
   transactions: [
-    { id:1, merchant:"Whole Foods",    amount:-42.80,  status:"settled", time:"Today · 2m ago",   icon:"🛒", category:"Grocery"   },
-    { id:2, merchant:"Uber",           amount:-18.20,  status:"settled", time:"Today · 1h ago",   icon:"🚗", category:"Transport"  },
-    { id:3, merchant:"Netflix",        amount:-15.99,  status:"pending", time:"Today · 3h ago",   icon:"🎬", category:"Streaming"  },
-    { id:4, merchant:"Yield Deposit",  amount:+1.156,  status:"credited",time:"Today · auto",     icon:"💰", category:"Yield"      },
-    { id:5, merchant:"Amazon",         amount:-89.99,  status:"settled", time:"Yesterday",        icon:"📦", category:"Shopping"   },
+    { id:1, merchant:"Whole Foods",      amount:-42.80,  status:"settled", time:"Today · 2m ago",   icon:"🛒", category:"Grocery"   },
+    { id:2, merchant:"Uber",             amount:-18.20,  status:"settled", time:"Today · 1h ago",   icon:"🚗", category:"Transport"  },
+    { id:3, merchant:"Netflix",          amount:-15.99,  status:"pending", time:"Today · 3h ago",   icon:"🎬", category:"Streaming"  },
+    { id:4, merchant:"Interest Earned",  amount:+1.156,  status:"credited",time:"Today · auto",     icon:"💰", category:"Interest"   },
+    { id:5, merchant:"Amazon",           amount:-89.99,  status:"settled", time:"Yesterday",        icon:"📦", category:"Shopping"   },
   ],
   contacts: [
     { id:1, name:"Jone",  color:"#F59E0B", bg:"#FEF3C7", emoji:"😎" },
@@ -33,7 +33,6 @@ const INITIAL_STATE = {
     { id:5, name:"Emy",   color:"#EF4444", bg:"#FEE2E2", emoji:"🎭" },
   ],
   card: { number:"4831 •••• •••• 7294", expiry:"09/28", type:"Visa", frozen:false, name:"ALEX CHEN" },
-  kpi: { usdmTvl:4250000, kpi1Progress:37.0, kpi3Daily:10590, kpi3Target:50000 },
 };
 
 const CHAIN_ADDRESSES = {
@@ -42,19 +41,9 @@ const CHAIN_ADDRESSES = {
 };
 const INITIAL_PRICES = { ETH: 2487.50, BTC: 94250.00, USDM: 1.0002, SOL: 152.30 };
 
-// ── WALLET GENERATION (simulated client-side key creation) ─────────────
-// In production: ethers.js Wallet.createRandom() runs entirely in the browser.
-// The private key NEVER leaves the device — we simulate that full UX here.
-const SEED_WORDS = [
-  "vessel","obscure","thunder","pilgrim","crystal","lantern",
-  "fortune","arctic","marble","swallow","eclipse","garden",
-];
-const genAddress = () => {
-  const h = Array.from({length:40}, ()=>Math.floor(Math.random()*16).toString(16)).join("");
-  return `0x${h.slice(0,6)}…${h.slice(-4)}`;
-};
-// Words user must confirm (positions 3, 7, 11 — 1-indexed)
-const CONFIRM_POSITIONS = [3, 7, 11];
+// ── ACCOUNT SETUP ──────────────────────────────────────────────────────
+// Wallet creation happens server-side with secure key management.
+// Users never interact with blockchain complexity directly.
 
 // ── HELPERS ────────────────────────────────────────────────────────────
 const fmt  = (n, d=2) => (n == null || !isFinite(n)) ? "0.00"
@@ -158,7 +147,7 @@ function Ticker({ value, color = T.lime, sizePx = 40, decSizePx = 24 }) {
   );
 }
 
-function Ring({ pct, size=100, stroke=8, color=T.lime }) {
+function Ring({ pct, size=100, stroke=8, color=T.lime, label="" }) {
   const safePct = isNaN(pct) || !isFinite(pct) ? 0 : Math.max(0, Math.min(pct, 100));
   const r    = (size - stroke * 2) / 2;
   const circ = 2 * Math.PI * r;
@@ -175,10 +164,12 @@ function Ring({ pct, size=100, stroke=8, color=T.lime }) {
         transform={`rotate(90,${c},${c})`} style={{ fontFamily:"Outfit,sans-serif" }}>
         {fmt(safePct,0)}%
       </text>
-      <text x={c} y={c+12} textAnchor="middle" fill={T.textMuted} fontSize="9"
-        transform={`rotate(90,${c},${c})`} style={{ fontFamily:"Outfit,sans-serif", letterSpacing:1 }}>
-        LTV
-      </text>
+      {label && (
+        <text x={c} y={c+12} textAnchor="middle" fill={T.textMuted} fontSize="9"
+          transform={`rotate(90,${c},${c})`} style={{ fontFamily:"Outfit,sans-serif", letterSpacing:1 }}>
+          {label}
+        </text>
+      )}
     </svg>
   );
 }
@@ -286,8 +277,8 @@ function DebitCard({ gradient, name, number, expiry, cardType, frozen, style={} 
 
 // ── SCREENS ────────────────────────────────────────────────────────────
 
-function HomeScreen({ state, prices, yieldAccum, totalCollateral, currentLtv, spendCapacity, notify }) {
-  const { int, dec } = splitFmt(totalCollateral);
+function HomeScreen({ state, prices, yieldAccum, totalBalance, spendingPower, notify }) {
+  const { int, dec } = splitFmt(totalBalance);
   const incomeTotal  = 20450;
   const expenseTotal = 22450;
 
@@ -356,14 +347,14 @@ function HomeScreen({ state, prices, yieldAccum, totalCollateral, currentLtv, sp
           </div>
           <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
             <span style={{ fontSize:28, fontWeight:800, color:T.lime }}>
-              ${fmt(yieldAccum + state.yieldData.earnedToday, 4)}
+              ${fmt(yieldAccum + state.savingsData.earnedToday, 4)}
             </span>
             <span style={{ color:"rgba(173,250,29,0.5)", fontSize:12 }}>today</span>
           </div>
         </div>
         <div style={{ textAlign:"right" }}>
-          <div style={{ color:"rgba(173,250,29,0.5)", fontSize:11, fontWeight:600, marginBottom:4 }}>APY</div>
-          <div style={{ fontSize:28, fontWeight:800, color:T.lime }}>{fmt(state.yieldData.apy)}%</div>
+          <div style={{ color:"rgba(173,250,29,0.5)", fontSize:11, fontWeight:600, marginBottom:4 }}>RATE</div>
+          <div style={{ fontSize:28, fontWeight:800, color:T.lime }}>{fmt(state.savingsData.apy)}%</div>
         </div>
         <div style={{ position:"absolute", right:20, top:"50%", transform:"translateY(-50%)" }}/>
       </div>
@@ -443,9 +434,9 @@ function CardsScreen({ state, setState, notify }) {
   const [activeCard, setActiveCard] = useState(0);
   const [frozen, setFrozen] = useState(state.card.frozen);
   const cards = [
-    { gradient:T.card1, label:"MegaBank Earn",   type:"Debit Card"  },
-    { gradient:T.card2, label:"MegaBank Spend",  type:"Credit Card" },
-    { gradient:T.card3, label:"MegaBank Crypto", type:"Crypto Card" },
+    { gradient:T.card1, label:"MegaBank Earn",    type:"Debit Card"   },
+    { gradient:T.card2, label:"MegaBank Spend",   type:"Credit Card"  },
+    { gradient:T.card3, label:"MegaBank Premium", type:"Premium Card" },
   ];
   const toggleFreeze = () => {
     const next = !frozen;
@@ -580,7 +571,7 @@ function CardsScreen({ state, setState, notify }) {
                 border:"1px solid rgba(239,68,68,0.3)", padding:"10px 18px", fontSize:13
               }} onClick={()=>{
                 setState(s=>({...s,credit:{...s.credit,outstandingDebt:0}}));
-                notify("Balance repaid from yield vault! ✓");
+                notify("Balance repaid from savings! ✓");
               }}>Repay</PillBtn>
             </div>
           )}
@@ -620,7 +611,7 @@ function DepositScreen({ state, setState, notify }) {
   return (
     <div style={{ padding:"0 20px 110px", animation:"slideUp 0.4s ease" }}>
       <div style={{ color:T.textMuted, fontSize:12, fontWeight:600, letterSpacing:2, marginBottom:16 }}>
-        DEPOSIT ASSETS
+        ADD FUNDS
       </div>
 
       {/* Chain tabs */}
@@ -741,13 +732,9 @@ function DepositScreen({ state, setState, notify }) {
   );
 }
 
-function YieldScreen({ state, yieldAccum }) {
-  const [rebalancing, setRebalancing] = useState(false);
-  const timerRef = useRef(null);
-  useEffect(()=>()=>{if(timerRef.current)clearTimeout(timerRef.current);},[]);
-
-  const perHour    = state.yieldData.deployed * (state.yieldData.apy/100) / (365*24);
-  const monthTotal = state.yieldData.earnedMonth + yieldAccum + state.yieldData.earnedToday;
+function EarnScreen({ state, yieldAccum }) {
+  const perHour    = state.savingsData.saved * (state.savingsData.apy/100) / (365*24);
+  const monthTotal = state.savingsData.earnedMonth + yieldAccum + state.savingsData.earnedToday;
 
   return (
     <div style={{ padding:"0 20px 110px", animation:"slideUp 0.4s ease" }}>
@@ -761,19 +748,19 @@ function YieldScreen({ state, yieldAccum }) {
         <div style={{ position:"absolute", top:-60, right:-60, width:200, height:200,
           borderRadius:"50%", background:"radial-gradient(circle, rgba(173,250,29,0.12), transparent)" }}/>
         <div style={{ color:"rgba(173,250,29,0.6)", fontSize:12, fontWeight:600, letterSpacing:2, marginBottom:6 }}>
-          TOTAL DEPLOYED
+          TOTAL SAVINGS
         </div>
         <div style={{ fontSize:44, fontWeight:900, color:T.lime, lineHeight:1, marginBottom:4 }}>
-          ${fmt(state.yieldData.deployed)}
+          ${fmt(state.savingsData.saved)}
         </div>
         <div style={{ color:"rgba(173,250,29,0.5)", fontSize:13, marginBottom:20 }}>
-          ◈ U.S. Treasury-backed · BlackRock BUIDL
+          Earning competitive rates on your balance
         </div>
         <div style={{ display:"flex", gap:24 }}>
           {[
-            { l:"Blended APY",  v:`${fmt(state.yieldData.apy)}%`    },
-            { l:"Per Hour",     v:`$${fmt(perHour,4)}`               },
-            { l:"This Month",   v:`$${fmt(monthTotal,2)}`            },
+            { l:"Interest Rate", v:`${fmt(state.savingsData.apy)}%`    },
+            { l:"Per Hour",      v:`$${fmt(perHour,4)}`                },
+            { l:"This Month",    v:`$${fmt(monthTotal,2)}`             },
           ].map(s=>(
             <div key={s.l}>
               <div style={{ color:"rgba(173,250,29,0.4)", fontSize:10, fontWeight:600, letterSpacing:1, marginBottom:4 }}>
@@ -794,27 +781,18 @@ function YieldScreen({ state, yieldAccum }) {
         <div style={{ width:10, height:10, borderRadius:"50%", background:T.lime, animation:"pulse 2s infinite", flexShrink:0 }}/>
         <span style={{ color:T.white, fontWeight:600 }}>Earning </span>
         <span style={{ color:T.lime, fontWeight:800, fontSize:18 }}>
-          ${fmt(yieldAccum + state.yieldData.earnedToday, 4)}
+          ${fmt(yieldAccum + state.savingsData.earnedToday, 4)}
         </span>
         <span style={{ color:T.textMuted, fontSize:12 }}>since open</span>
       </div>
 
-      {/* Strategies */}
+      {/* Savings Plans */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <div style={{ color:T.textMuted, fontSize:12, fontWeight:600, letterSpacing:2 }}>STRATEGIES</div>
-        <PillBtn variant="ghost" style={{
-          background:"rgba(173,250,29,0.1)", color:T.lime, border:`1px solid rgba(173,250,29,0.3)`,
-          padding:"7px 16px", fontSize:12
-        }} onClick={()=>{
-          setRebalancing(true);
-          timerRef.current = setTimeout(()=>setRebalancing(false), 1500);
-        }}>
-          {rebalancing ? "⏳ Rebalancing…" : "Rebalance"}
-        </PillBtn>
+        <div style={{ color:T.textMuted, fontSize:12, fontWeight:600, letterSpacing:2 }}>SAVINGS PLANS</div>
       </div>
 
       <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
-        {state.yieldData.strategies.map(s=>{
+        {state.savingsData.plans.map(s=>{
           const col = s.apy > 6 ? T.amber : T.lime;
           return (
             <div key={s.name} style={{
@@ -824,7 +802,6 @@ function YieldScreen({ state, yieldAccum }) {
                 <div>
                   <div style={{ color:T.white, fontWeight:700, fontSize:15 }}>{s.name}</div>
                   <div style={{ color:T.textMuted, fontSize:12, marginTop:2 }}>
-                    {s.protocol} ·{" "}
                     <span style={{ color: s.risk==="Lowest"?T.lime : s.risk==="Low"?"#60A5FA":T.amber, fontWeight:600 }}>
                       {s.risk} Risk
                     </span>
@@ -836,7 +813,7 @@ function YieldScreen({ state, yieldAccum }) {
                 </div>
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-                <span style={{ color:T.textMuted, fontSize:12 }}>${fmt(s.balance)} deployed</span>
+                <span style={{ color:T.textMuted, fontSize:12 }}>${fmt(s.balance)} saved</span>
                 <span style={{ color:T.textMuted, fontSize:12 }}>{s.allocation}%</span>
               </div>
               <div style={{ height:6, borderRadius:3, background:"rgba(255,255,255,0.06)" }}>
@@ -853,10 +830,10 @@ function YieldScreen({ state, yieldAccum }) {
       {/* Stats grid */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
         {[
-          { l:"Today",           v:`$${fmt(yieldAccum+state.yieldData.earnedToday,4)}`, c:T.lime  },
-          { l:"This Month",      v:`$${fmt(monthTotal,2)}`,                             c:T.lime  },
-          { l:"Deployed",        v:`$${fmt(state.yieldData.deployed)}`,                c:"#60A5FA"},
-          { l:"Projected Annual",v:`$${fmt(state.yieldData.deployed*state.yieldData.apy/100)}`, c:T.amber },
+          { l:"Today",           v:`$${fmt(yieldAccum+state.savingsData.earnedToday,4)}`, c:T.lime  },
+          { l:"This Month",      v:`$${fmt(monthTotal,2)}`,                               c:T.lime  },
+          { l:"Total Saved",     v:`$${fmt(state.savingsData.saved)}`,                    c:"#60A5FA"},
+          { l:"Projected Annual",v:`$${fmt(state.savingsData.saved*state.savingsData.apy/100)}`, c:T.amber },
         ].map(item=>(
           <div key={item.l} style={{ background:T.surfaceB, border:`1px solid ${T.border}`, borderRadius:18, padding:"16px" }}>
             <div style={{ color:T.textMuted, fontSize:10, letterSpacing:1, marginBottom:8 }}>{item.l.toUpperCase()}</div>
@@ -868,95 +845,49 @@ function YieldScreen({ state, yieldAccum }) {
   );
 }
 
-function RiskScreen({ state, totalCollateral, creditLimit, currentLtv, spendCapacity }) {
-  const [ltvScenario, setLtvScenario] = useState(0);
-  const scenarioLtv   = currentLtv / (1 + ltvScenario/100);
-  const scenarioColor = scenarioLtv < 65 ? T.lime : scenarioLtv < 75 ? T.amber : T.red;
+function CreditScreen({ state, setState, notify, totalBalance, creditLimit, riskLevel, spendingPower }) {
+  const riskColor = riskLevel === "Low" ? T.lime : riskLevel === "Medium" ? T.amber : T.red;
+  const riskPct   = riskLevel === "Low" ? 25 : riskLevel === "Medium" ? 60 : 85;
+  const [borrowAmt, setBorrowAmt] = useState(500);
 
   return (
     <div style={{ padding:"0 20px 110px", animation:"slideUp 0.4s ease" }}>
 
-      {/* LTV gauge card */}
+      {/* Spending Power Hero */}
       <div style={{
         background:T.surfaceB, border:`1px solid ${T.border}`, borderRadius:28,
         padding:"28px", marginBottom:16, textAlign:"center"
       }}>
         <div style={{ color:T.textMuted, fontSize:12, fontWeight:600, letterSpacing:2, marginBottom:16 }}>
-          ACCOUNT HEALTH
+          SPENDING POWER
         </div>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}>
-          <Ring pct={scenarioLtv} size={160} stroke={12} color={scenarioColor}/>
+        <div style={{ fontSize:48, fontWeight:900, color:T.lime, lineHeight:1, marginBottom:8 }}>
+          ${fmt(Math.max(0, spendingPower))}
         </div>
+        <div style={{ color:T.textMuted, fontSize:13, marginBottom:20 }}>
+          Available to spend or withdraw
+        </div>
+
+        {/* Risk Level Indicator */}
         <div style={{
-          display:"inline-block", padding:"8px 24px", borderRadius:50,
-          fontWeight:800, fontSize:13, letterSpacing:2,
-          background:`${scenarioColor}18`, color:scenarioColor, border:`1px solid ${scenarioColor}30`
+          display:"inline-flex", alignItems:"center", gap:10, padding:"10px 24px", borderRadius:50,
+          background:`${riskColor}18`, border:`1px solid ${riskColor}30`
         }}>
-          {scenarioLtv < 65 ? "HEALTHY" : scenarioLtv < 75 ? "WARNING" : scenarioLtv < 85 ? "DANGER" : "⚠ LIQUIDATION"}
-        </div>
-        {ltvScenario !== 0 && (
-          <div style={{ color:T.textDim, fontSize:11, marginTop:8 }}>SIMULATED</div>
-        )}
-      </div>
-
-      {/* Zone bar */}
-      <div style={{ marginBottom:16 }}>
-        <div style={{ display:"flex", height:10, borderRadius:6, overflow:"hidden", marginBottom:8 }}>
-          <div style={{ width:"65%", background:T.lime  }}/>
-          <div style={{ width:"10%", background:T.amber }}/>
-          <div style={{ width:"10%", background:T.red   }}/>
-          <div style={{ width:"15%", background:"#7F1D1D" }}/>
-        </div>
-        <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:T.textDim }}>
-          <span>0%</span><span>65%</span><span>75%</span><span>85%</span><span>100%</span>
-        </div>
-      </div>
-
-      {/* Scenario simulator */}
-      <div style={{
-        background:`rgba(124,58,237,0.08)`, border:`1px solid rgba(124,58,237,0.2)`,
-        borderRadius:24, padding:"20px", marginBottom:16
-      }}>
-        <div style={{ color:T.textMuted, fontSize:12, fontWeight:600, letterSpacing:2, marginBottom:12 }}>
-          PRICE SIMULATOR
-        </div>
-        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
-          <span style={{ color:T.textMuted, fontSize:13 }}>
-            {ltvScenario===0 ? "Drag to simulate" : ltvScenario<0
-              ? `If prices drop ${Math.abs(ltvScenario)}%`
-              : `If prices pump +${ltvScenario}%`}
-          </span>
-          <span style={{ color:scenarioColor, fontWeight:800, fontSize:15 }}>
-            LTV → {fmt(scenarioLtv,1)}%
+          <div style={{ width:10, height:10, borderRadius:"50%", background:riskColor,
+            boxShadow:`0 0 8px ${riskColor}60` }}/>
+          <span style={{ color:riskColor, fontWeight:800, fontSize:14, letterSpacing:1 }}>
+            {riskLevel.toUpperCase()} RISK
           </span>
         </div>
-        <input type="range" min="-30" max="50" value={ltvScenario}
-          onChange={e=>setLtvScenario(parseInt(e.target.value))}
-          style={{ width:"100%", accentColor:T.violet }}/>
-        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:T.textDim, marginTop:6 }}>
-          <span>−30% crash</span><span>No change</span><span>+50% pump</span>
-        </div>
-        {scenarioLtv >= 75 && (
-          <div style={{
-            marginTop:14, background:"rgba(239,68,68,0.1)", borderRadius:14,
-            padding:"12px 16px", color:T.red, fontSize:13, fontWeight:600
-          }}>
-            ⚠ {scenarioLtv >= 85 ? "Liquidation" : "Margin call"} risk detected.
-            Add ${fmt(state.credit.outstandingDebt * 0.3)} collateral to stay safe.
-          </div>
-        )}
       </div>
 
-      {/* Position summary */}
-      <div style={{ color:T.textMuted, fontSize:12, fontWeight:600, letterSpacing:2, marginBottom:12 }}>
-        POSITION SUMMARY
-      </div>
+      {/* Account Summary */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
         {[
-          { l:"Total Collateral",  v:`$${fmt(totalCollateral)}`, c:"#60A5FA" },
-          { l:"Credit Limit",      v:`$${fmt(creditLimit)}`,     c:"#60A5FA" },
-          { l:"Outstanding Debt",  v:`$${fmt(state.credit.outstandingDebt)}`, c:T.red  },
-          { l:"Spend Capacity",    v:`$${fmt(Math.max(0,spendCapacity))}`,    c:T.lime },
+          { l:"Total Balance",     v:`$${fmt(totalBalance)}`,     c:"#60A5FA" },
+          { l:"Available Credit",  v:`$${fmt(creditLimit)}`,      c:"#60A5FA" },
+          { l:"Amount Borrowed",   v:`$${fmt(state.credit.outstandingDebt)}`, c: state.credit.outstandingDebt > 0 ? T.amber : T.textMuted },
+          { l:"Spending Power",    v:`$${fmt(Math.max(0, spendingPower))}`,   c:T.lime },
         ].map(item=>(
           <div key={item.l} style={{ background:T.surfaceB, border:`1px solid ${T.border}`, borderRadius:18, padding:"16px" }}>
             <div style={{ color:T.textMuted, fontSize:10, letterSpacing:1, marginBottom:8 }}>{item.l.toUpperCase()}</div>
@@ -965,55 +896,90 @@ function RiskScreen({ state, totalCollateral, creditLimit, currentLtv, spendCapa
         ))}
       </div>
 
-      {/* MegaETH KPI */}
+      {/* Borrow / Unlock Spending Power */}
       <div style={{
-        background:"linear-gradient(135deg,rgba(0,77,64,0.4),rgba(0,40,35,0.6))",
-        border:`1px solid rgba(173,250,29,0.2)`, borderRadius:24, padding:"20px"
+        background:`rgba(124,58,237,0.08)`, border:`1px solid rgba(124,58,237,0.2)`,
+        borderRadius:24, padding:"20px", marginBottom:16
       }}>
-        <div style={{ color:"rgba(173,250,29,0.6)", fontSize:11, fontWeight:600, letterSpacing:2, marginBottom:14 }}>
-          MEGAETH ECOSYSTEM
+        <div style={{ color:T.textMuted, fontSize:12, fontWeight:600, letterSpacing:2, marginBottom:16 }}>
+          UNLOCK MORE SPENDING POWER
         </div>
-        {/* USDm bar */}
-        <div style={{ marginBottom:12 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-            <span style={{ color:T.textMuted, fontSize:12 }}>USDm TVL</span>
-            <span style={{ color:T.lime, fontSize:12, fontWeight:700 }}>${(state.kpi.usdmTvl/1e6).toFixed(2)}M</span>
-          </div>
-          <div style={{ height:6, borderRadius:3, background:"rgba(255,255,255,0.06)" }}>
-            <div style={{ height:"100%", borderRadius:3, width:`${state.kpi.kpi1Progress}%`, background:T.lime }}/>
-          </div>
-          <div style={{ color:T.textDim, fontSize:10, marginTop:4 }}>{fmt(state.kpi.kpi1Progress,1)}% toward $500M KPI</div>
+        <div style={{ color:T.white, fontSize:14, marginBottom:16, lineHeight:1.6 }}>
+          Borrow against your deposited assets without selling them. Funds are instantly available on your card.
         </div>
-        {/* Daily fees bar */}
-        <div style={{ marginBottom:12 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-            <span style={{ color:T.textMuted, fontSize:12 }}>Daily Fees</span>
-            <span style={{ color:T.amber, fontSize:12, fontWeight:700 }}>
-              ${state.kpi.kpi3Daily.toLocaleString()} / $50K
-            </span>
-          </div>
-          <div style={{ height:6, borderRadius:3, background:"rgba(255,255,255,0.06)" }}>
-            <div style={{
-              height:"100%", borderRadius:3, background:T.amber,
-              width:`${Math.min(100,(state.kpi.kpi3Daily/state.kpi.kpi3Target)*100)}%`
-            }}/>
-          </div>
+
+        {/* Borrow slider */}
+        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
+          <span style={{ color:T.textMuted, fontSize:13 }}>Borrow amount</span>
+          <span style={{ color:T.violet, fontWeight:800, fontSize:18 }}>${fmt(borrowAmt, 0)}</span>
         </div>
-        <div style={{
-          background:"rgba(173,250,29,0.1)", borderRadius:12, padding:"10px 14px",
-          color:"rgba(173,250,29,0.75)", fontSize:12, fontWeight:600
-        }}>
-          ✓ KPI 2: App live on MegaETH mainnet (1 of 10)
+        <input type="range" min="100" max={Math.max(100, Math.floor(creditLimit))}
+          value={borrowAmt} onChange={e=>setBorrowAmt(parseInt(e.target.value))}
+          style={{ width:"100%", accentColor:T.violet }}/>
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:T.textDim, marginTop:6, marginBottom:16 }}>
+          <span>$100</span><span>${fmt(creditLimit, 0)} max</span>
         </div>
+
+        <PillBtn variant="violet" onClick={()=>{
+          setState(s=>({...s, credit:{...s.credit, outstandingDebt: s.credit.outstandingDebt + borrowAmt }}));
+          notify(`$${fmt(borrowAmt, 0)} added to your spending power!`);
+        }} style={{ width:"100%", fontSize:15, padding:"16px" }}>
+          Unlock ${fmt(borrowAmt, 0)} Spending Power
+        </PillBtn>
       </div>
+
+      {/* Repay section */}
+      {state.credit.outstandingDebt > 0 && (
+        <div style={{
+          background:T.surfaceB, border:`1px solid ${T.border}`, borderRadius:24, padding:"20px", marginBottom:16
+        }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div>
+              <div style={{ color:T.textMuted, fontSize:12, fontWeight:600, letterSpacing:2, marginBottom:6 }}>
+                OUTSTANDING BALANCE
+              </div>
+              <div style={{ color:T.amber, fontWeight:900, fontSize:28 }}>
+                ${fmt(state.credit.outstandingDebt)}
+              </div>
+            </div>
+            <PillBtn variant="lime" style={{ padding:"12px 24px", fontSize:14 }} onClick={()=>{
+              setState(s=>({...s, credit:{...s.credit, outstandingDebt:0}}));
+              notify("Balance repaid successfully!");
+            }}>
+              Repay All
+            </PillBtn>
+          </div>
+        </div>
+      )}
+
+      {/* Risk Alert (only if Medium or High) */}
+      {riskLevel !== "Low" && (
+        <div style={{
+          background: riskLevel === "High" ? "rgba(239,68,68,0.1)" : "rgba(245,158,11,0.1)",
+          border: `1px solid ${riskLevel === "High" ? "rgba(239,68,68,0.3)" : "rgba(245,158,11,0.3)"}`,
+          borderRadius:20, padding:"18px", display:"flex", gap:12, alignItems:"flex-start"
+        }}>
+          <span style={{ fontSize:24, flexShrink:0 }}>{riskLevel === "High" ? "⚠️" : "💡"}</span>
+          <div>
+            <div style={{ color: riskColor, fontWeight:700, fontSize:14, marginBottom:4 }}>
+              {riskLevel === "High" ? "Action recommended" : "Keep an eye on this"}
+            </div>
+            <div style={{ color:T.textMuted, fontSize:13, lineHeight:1.6 }}>
+              {riskLevel === "High"
+                ? "Your borrowed amount is close to your limit. Consider repaying some or depositing more funds to avoid automatic adjustments."
+                : "Your balance is healthy, but depositing more or repaying part of your balance will give you more flexibility."}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // ── ONBOARDING FLOW ────────────────────────────────────────────────────
-// 6 steps: splash → signup → verify → generating → seed → confirm → ready
-// Zero "Connect Wallet" anywhere. Keys are generated silently on-device.
+// 4 steps: splash → signup → verify → generating → ready
+// No blockchain complexity exposed. Account creation handled server-side.
 // ═══════════════════════════════════════════════════════════════════════
 
 /* ── Step 1: Splash ── */
@@ -1057,7 +1023,7 @@ function SplashScreen({ onNext }) {
             </div>
             <div style={{ position:"absolute", bottom:12, left:14, right:14,
               fontSize:11, fontWeight:700, color:"rgba(255,255,255,0.7)", letterSpacing:2 }}>
-              {["DEBIT CARD","CRYPTO","EARN"][i]}
+              {["DEBIT CARD","CREDIT","SAVINGS"][i]}
             </div>
           </div>
         ))}
@@ -1079,7 +1045,7 @@ function SplashScreen({ onNext }) {
         </div>
         <div style={{ color:T.textMuted, fontSize:15, lineHeight:1.6, marginBottom:36 }}>
           Seamless money management, effortless transactions
-          and personalised DeFi — all in one app.
+          and intelligent savings — all in one app.
         </div>
         <PillBtn variant="violet" onClick={onNext} style={{
           width:"100%", fontSize:17, fontWeight:800, padding:"18px",
@@ -1089,7 +1055,7 @@ function SplashScreen({ onNext }) {
           Get Started
         </PillBtn>
         <div style={{ textAlign:"center", marginTop:18, color:T.textDim, fontSize:12 }}>
-          No wallet setup needed · True self-custody
+          Bank-grade security · No fees on transfers
         </div>
       </div>
     </div>
@@ -1128,7 +1094,7 @@ function SignupScreen({ onNext }) {
           Create your account
         </div>
         <div style={{ color:T.textMuted, fontSize:14, marginBottom:32 }}>
-          Your crypto wallet is created automatically — no setup needed.
+          Set up takes less than 2 minutes.
         </div>
 
         {/* Name */}
@@ -1179,8 +1145,8 @@ function SignupScreen({ onNext }) {
         }}>
           <span style={{ fontSize:18, flexShrink:0 }}>🔐</span>
           <div style={{ color:"rgba(173,250,29,0.75)", fontSize:12, lineHeight:1.5 }}>
-            <strong style={{ display:"block", marginBottom:2 }}>Your keys, your crypto</strong>
-            Your wallet is generated on your device. We never see or store your private key.
+            <strong style={{ display:"block", marginBottom:2 }}>Bank-grade security</strong>
+            Your account is protected by encryption, fraud monitoring, and multi-factor authentication.
           </div>
         </div>
       </div>
@@ -1289,14 +1255,14 @@ function VerifyScreen({ onNext }) {
   );
 }
 
-/* ── Step 4: Generating Wallet (silent key creation) ── */
+/* ── Step 4: Setting Up Account ── */
 function GeneratingScreen({ onDone }) {
   const steps = [
-    { label:"Generating secure key pair…",    detail:"Entropy seeded from device hardware", icon:"🎲" },
-    { label:"Deriving HD wallet (BIP-44)…",   detail:"m/44'/60'/0'/0/0 derivation path",    icon:"🌿" },
-    { label:"Encrypting with device keystore…",detail:"iOS Secure Enclave / Android Keystore",icon:"🔐" },
-    { label:"Keys stored locally on device…", detail:"Private key never leaves your phone",  icon:"📱" },
-    { label:"Wallet ready!",                  detail:"Your blockchain identity is created",  icon:"✅" },
+    { label:"Verifying your identity…",       detail:"Secure identity check",                   icon:"🔐" },
+    { label:"Setting up your account…",        detail:"Creating your personal account",          icon:"📋" },
+    { label:"Enabling bank-grade security…",   detail:"Multi-factor authentication & encryption",icon:"🛡" },
+    { label:"Connecting your card…",           detail:"Virtual card ready for instant use",      icon:"💳" },
+    { label:"Account ready!",                  detail:"You're all set to start",                 icon:"✅" },
   ];
   const [activeStep, setActiveStep] = useState(0);
   const [done, setDone]             = useState(false);
@@ -1340,10 +1306,10 @@ function GeneratingScreen({ onDone }) {
       </div>
 
       <div style={{ fontSize:22, fontWeight:900, color:T.white, marginBottom:6, textAlign:"center" }}>
-        {done ? "Wallet Created!" : "Creating your wallet"}
+        {done ? "Account Created!" : "Setting up your account"}
       </div>
       <div style={{ color:T.textMuted, fontSize:13, marginBottom:40, textAlign:"center" }}>
-        {done ? "Your keys are secured on this device" : "This only takes a moment…"}
+        {done ? "Your account is ready to use" : "This only takes a moment…"}
       </div>
 
       {/* Step list */}
@@ -1394,212 +1360,11 @@ function GeneratingScreen({ onDone }) {
   );
 }
 
-/* ── Step 5: Seed Phrase Backup ── */
-function SeedScreen({ onNext }) {
-  const [revealed,  setRevealed]  = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+/* ── SeedScreen and ConfirmSeedScreen removed ── */
+/* Seed phrase backup is now accessible only via Settings > Advanced Security */
 
-  return (
-    <div style={{
-      height:"100%", display:"flex", flexDirection:"column",
-      padding:"24px 24px 36px", animation:"slideUp 0.4s ease", overflowY:"auto"
-    }}>
-      <div style={{ fontSize:26, fontWeight:900, color:T.white, marginBottom:6 }}>
-        Back up your wallet
-      </div>
-      <div style={{ color:T.textMuted, fontSize:14, marginBottom:20, lineHeight:1.6 }}>
-        These 12 words are your <strong style={{color:T.white}}>recovery phrase</strong>. Write them down
-        on paper and keep them somewhere safe — this is the only way to recover your wallet.
-      </div>
-
-      {/* Warning banner */}
-      <div style={{
-        background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)",
-        borderRadius:14, padding:"13px 16px", marginBottom:20,
-        display:"flex", gap:10, alignItems:"flex-start"
-      }}>
-        <span style={{ fontSize:18 }}>⚠️</span>
-        <div style={{ color:"rgba(245,158,11,0.9)", fontSize:12, lineHeight:1.5 }}>
-          <strong style={{display:"block",marginBottom:2}}>Never share these words with anyone</strong>
-          Anyone with your recovery phrase has full access to your funds.
-        </div>
-      </div>
-
-      {/* Seed grid */}
-      <div style={{ position:"relative", marginBottom:16 }}>
-        <div style={{
-          display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8
-        }}>
-          {SEED_WORDS.map((w,i)=>(
-            <div key={i} style={{
-              background: T.surfaceB, border:`1px solid ${T.border}`,
-              borderRadius:12, padding:"10px 8px",
-              display:"flex", alignItems:"center", gap:6,
-              animation:`wordPop 0.3s ease ${i*0.05}s both`,
-              filter: revealed ? "none" : "blur(6px)",
-              transition:"filter 0.4s ease",
-              userSelect: revealed ? "text" : "none"
-            }}>
-              <span style={{ color:T.textDim, fontSize:10, fontWeight:600, minWidth:16, textAlign:"right" }}>
-                {i+1}
-              </span>
-              <span style={{ color:T.white, fontSize:13, fontWeight:700 }}>{w}</span>
-            </div>
-          ))}
-        </div>
-        {/* Blur overlay */}
-        {!revealed && (
-          <div style={{
-            position:"absolute", inset:0, borderRadius:14,
-            backdropFilter:"blur(2px)",
-            background:"rgba(11,11,20,0.4)",
-            display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-            gap:10, cursor:"pointer"
-          }} onClick={()=>setRevealed(true)}>
-            <span style={{ fontSize:28 }}>👁</span>
-            <span style={{ color:T.white, fontWeight:700, fontSize:14 }}>Tap to reveal</span>
-            <span style={{ color:T.textMuted, fontSize:12 }}>Make sure no one is watching</span>
-          </div>
-        )}
-      </div>
-
-      {/* Confirmation checkbox */}
-      {revealed && (
-        <div onClick={()=>setConfirmed(c=>!c)}
-          style={{
-            display:"flex", alignItems:"flex-start", gap:12, cursor:"pointer",
-            background:confirmed?"rgba(173,250,29,0.08)":"rgba(255,255,255,0.03)",
-            border:`1px solid ${confirmed?T.lime:T.border}`, borderRadius:14,
-            padding:"14px 16px", marginBottom:20, transition:"all 0.2s"
-          }}>
-          <div style={{
-            width:22, height:22, borderRadius:6, flexShrink:0, marginTop:1,
-            background:confirmed?T.lime:"transparent",
-            border:`2px solid ${confirmed?T.lime:T.border}`,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            transition:"all 0.2s"
-          }}>
-            {confirmed && <span style={{ color:"#0B0B14", fontSize:13, fontWeight:900 }}>✓</span>}
-          </div>
-          <span style={{ color:confirmed?T.white:T.textMuted, fontSize:13, lineHeight:1.5, transition:"color 0.2s" }}>
-            I've written down all 12 words in the correct order and stored them safely.
-          </span>
-        </div>
-      )}
-
-      <div style={{ flex:1 }}/>
-      <PillBtn variant="lime" onClick={()=>{ if(revealed&&confirmed) onNext(); }} style={{
-        width:"100%", fontSize:16, padding:"18px",
-        opacity: revealed&&confirmed ? 1 : 0.38
-      }}>
-        I've Saved My Recovery Phrase →
-      </PillBtn>
-    </div>
-  );
-}
-
-/* ── Step 6: Confirm Seed (word quiz) ── */
-function ConfirmSeedScreen({ onNext }) {
-  // User must tap the correct word for positions 3, 7, 11
-  const targets = CONFIRM_POSITIONS.map(p => ({ pos:p, word:SEED_WORDS[p-1] }));
-  const [step, setStep]     = useState(0);
-  const [wrong, setWrong]   = useState(false);
-  const [allDone, setAllDone] = useState(false);
-
-  const target = targets[step];
-
-  // Generate 4 choices: correct + 3 random wrong ones
-  const choices = (() => {
-    const others = SEED_WORDS.filter(w=>w!==target?.word);
-    const shuffled = others.sort(()=>Math.random()-0.5).slice(0,3);
-    return [...shuffled, target?.word].sort(()=>Math.random()-0.5);
-  })();
-
-  const handlePick = (w) => {
-    if(w === target.word) {
-      if(step === targets.length-1) { setAllDone(true); }
-      else { setStep(s=>s+1); setWrong(false); }
-    } else {
-      setWrong(true);
-      setTimeout(()=>setWrong(false), 800);
-    }
-  };
-
-  if(allDone) return (
-    <div style={{
-      height:"100%", display:"flex", flexDirection:"column",
-      alignItems:"center", justifyContent:"center", padding:"28px",
-      animation:"scaleIn 0.5s ease"
-    }}>
-      <div style={{ fontSize:60, marginBottom:16 }}>🎉</div>
-      <div style={{ fontSize:26, fontWeight:900, color:T.white, marginBottom:10, textAlign:"center" }}>
-        Recovery phrase confirmed!
-      </div>
-      <div style={{ color:T.textMuted, fontSize:14, textAlign:"center", marginBottom:36, lineHeight:1.6 }}>
-        Your wallet is fully secured. Only you can access your funds.
-      </div>
-      <PillBtn variant="lime" onClick={onNext} style={{ width:"100%", fontSize:16, padding:"18px" }}>
-        Continue to App →
-      </PillBtn>
-    </div>
-  );
-
-  return (
-    <div style={{
-      height:"100%", display:"flex", flexDirection:"column",
-      padding:"28px 28px 40px", animation:"slideUp 0.4s ease"
-    }}>
-      {/* Progress dots */}
-      <div style={{ display:"flex", gap:8, marginBottom:28 }}>
-        {targets.map((_,i)=>(
-          <div key={i} style={{
-            height:6, flex:1, borderRadius:3,
-            background: i<=step ? T.lime : T.border, transition:"background 0.3s"
-          }}/>
-        ))}
-      </div>
-
-      <div style={{ fontSize:26, fontWeight:900, color:T.white, marginBottom:8 }}>
-        Confirm your phrase
-      </div>
-      <div style={{ color:T.textMuted, fontSize:14, marginBottom:32, lineHeight:1.6 }}>
-        Which word was <strong style={{color:T.white}}>word #{target.pos}</strong>?
-      </div>
-
-      <div style={{
-        fontSize:52, textAlign:"center", margin:"0 auto 32px",
-        color:T.textMuted, fontWeight:700
-      }}>#{target.pos}</div>
-
-      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {choices.map((w,i)=>(
-          <button key={i} onClick={()=>handlePick(w)} className="btn-press" style={{
-            padding:"16px 20px", borderRadius:16, border:"1px solid", cursor:"pointer",
-            fontFamily:"'Outfit',sans-serif", fontSize:16, fontWeight:700,
-            background:"rgba(255,255,255,0.04)", color:T.white,
-            borderColor: wrong ? "rgba(239,68,68,0.5)" : T.border,
-            animation: wrong ? "none" : "none",
-            transition:"border-color 0.2s"
-          }}>
-            {w}
-          </button>
-        ))}
-      </div>
-
-      {wrong && (
-        <div style={{
-          marginTop:16, color:T.red, fontSize:13, fontWeight:600, textAlign:"center",
-          animation:"slideUp 0.2s ease"
-        }}>
-          That's not right — try again
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Step 7: Wallet Ready ── */
-function WalletReadyScreen({ userName, walletAddress, onEnter }) {
+/* ── Step 5: Account Ready ── */
+function AccountReadyScreen({ userName, onEnter }) {
   return (
     <div style={{
       height:"100%", display:"flex", flexDirection:"column", alignItems:"center",
@@ -1628,31 +1393,12 @@ function WalletReadyScreen({ userName, walletAddress, onEnter }) {
       </div>
 
       <div style={{ fontSize:30, fontWeight:900, color:T.white, lineHeight:1.2, marginBottom:10 }}>
-        Your crypto bank<br/>
+        Your account<br/>
         <span style={{ color:T.lime }}>is ready!</span>
       </div>
-      <div style={{ color:T.textMuted, fontSize:14, lineHeight:1.6, marginBottom:28 }}>
-        Welcome, <strong style={{color:T.white}}>{userName}</strong>. Your non-custodial wallet
-        is live on MegaETH. You own your keys — nobody else does.
-      </div>
-
-      {/* Wallet address pill */}
-      <div style={{
-        background:T.surfaceB, border:`1px solid ${T.border}`,
-        borderRadius:50, padding:"10px 20px", marginBottom:12,
-        display:"flex", alignItems:"center", gap:10
-      }}>
-        <div style={{
-          width:28, height:28, borderRadius:"50%",
-          background:`linear-gradient(135deg, ${T.violet}, ${T.lime})`,
-          flexShrink:0
-        }}/>
-        <span style={{ color:T.white, fontWeight:600, fontSize:13, fontFamily:"monospace" }}>
-          {walletAddress}
-        </span>
-      </div>
-      <div style={{ color:T.textDim, fontSize:11, marginBottom:40 }}>
-        Your on-chain address (MegaETH) · Keys stored locally
+      <div style={{ color:T.textMuted, fontSize:14, lineHeight:1.6, marginBottom:36 }}>
+        Welcome, <strong style={{color:T.white}}>{userName}</strong>. Your MegaBank account is set up
+        and ready to go. Start depositing, earning, and spending.
       </div>
 
       {/* What's next */}
@@ -1661,9 +1407,9 @@ function WalletReadyScreen({ userName, walletAddress, onEnter }) {
         borderRadius:20, padding:"18px 20px", marginBottom:32, textAlign:"left"
       }}>
         {[
-          ["◈ Auto-earn",    "Idle balances earn U.S. Treasury yield automatically"],
-          ["▭ Instant card", "Spend your crypto anywhere, transactions signed invisibly"],
-          ["⊞ Self-custody", "Your keys live on this device — Megabank never holds them"],
+          ["💰 Earn interest",  "Your balance earns competitive interest rates automatically"],
+          ["💳 Spend anywhere", "Use your virtual card at millions of merchants worldwide"],
+          ["📲 Send money",     "Transfer funds to friends and family instantly"],
         ].map(([title,desc])=>(
           <div key={title} style={{ display:"flex", gap:12, marginBottom:12, alignItems:"flex-start" }}>
             <div style={{
@@ -1695,18 +1441,14 @@ function WalletReadyScreen({ userName, walletAddress, onEnter }) {
 // ── MAIN APP ───────────────────────────────────────────────────────────
 export default function MegaBank() {
   // ── Onboarding state ──
-  // "splash" → "signup" → "verify" → "generating" → "seed" → "confirm" → "ready" → null (main app)
+  // "splash" → "signup" → "verify" → "generating" → "ready" → null (main app)
   const [onboardStep, setOnboardStep] = useState("splash");
   const [userName,    setUserName]    = useState("");
-  const [walletAddr,  setWalletAddr]  = useState("");
 
   // Advance through onboarding
-  const goSplash     = ()                => setOnboardStep("splash");
   const goSignup     = ()                => setOnboardStep("signup");
   const goVerify     = (name)            => { setUserName(name); setOnboardStep("verify"); };
   const goGenerating = ()                => setOnboardStep("generating");
-  const goSeed       = ()                => { setWalletAddr(genAddress()); setOnboardStep("seed"); };
-  const goConfirm    = ()                => setOnboardStep("confirm");
   const goReady      = ()                => setOnboardStep("ready");
   const enterApp     = ()                => setOnboardStep(null);
 
@@ -1719,12 +1461,12 @@ export default function MegaBank() {
   const [notification, setNotification] = useState(null);
   const notifyTimerRef = useRef(null);
 
-  // Yield ticker
+  // Interest ticker
   useEffect(()=>{
-    const rate = state.yieldData.deployed * (state.yieldData.apy/100) / (365*24*3600);
+    const rate = state.savingsData.saved * (state.savingsData.apy/100) / (365*24*3600);
     const id = setInterval(()=>setYieldAccum(v=>v+rate), 1000);
     return ()=>clearInterval(id);
-  }, [state.yieldData.deployed, state.yieldData.apy]);
+  }, [state.savingsData.saved, state.savingsData.apy]);
 
   // Price simulation
   useEffect(()=>{
@@ -1744,20 +1486,21 @@ export default function MegaBank() {
   }, []);
 
   // Derived values
-  const totalCollateral = Object.entries(state.balances).reduce((s,[k,v])=>s+v.amount*prices[k], 0);
-  const weightedLtv     = Object.entries(state.balances).reduce((s,[k,v])=>s+(v.amount*prices[k])*v.ltv, 0) / totalCollateral;
-  const creditLimit     = totalCollateral * weightedLtv * 0.70;
-  const currentLtv      = state.credit.outstandingDebt / totalCollateral * 100;
-  const spendCapacity   = creditLimit - state.credit.outstandingDebt;
+  const totalBalance   = Object.entries(state.balances).reduce((s,[k,v])=>s+v.amount*prices[k], 0);
+  const weightedFactor = Object.entries(state.balances).reduce((s,[k,v])=>s+(v.amount*prices[k])*v.weight, 0) / totalBalance;
+  const creditLimit    = totalBalance * weightedFactor * 0.70;
+  const spendingPower  = creditLimit - state.credit.outstandingDebt;
+  const riskPct        = totalBalance > 0 ? (state.credit.outstandingDebt / creditLimit) * 100 : 0;
+  const riskLevel      = riskPct < 50 ? "Low" : riskPct < 80 ? "Medium" : "High";
 
-  const sharedProps = { state, setState, notify, totalCollateral, creditLimit, currentLtv, spendCapacity };
+  const sharedProps = { state, setState, notify, totalBalance, creditLimit, spendingPower, riskLevel };
 
   const nav = [
     { id:"home",    icon:"⌂",  label:"Home"    },
     { id:"cards",   icon:"▭",  label:"Cards"   },
-    { id:"yield",   icon:"◈",  label:"Yield"   },
+    { id:"earn",    icon:"◈",  label:"Earn"    },
     { id:"deposit", icon:"⬇",  label:"Deposit" },
-    { id:"risk",    icon:"◎",  label:"Risk"    },
+    { id:"credit",  icon:"◎",  label:"Credit"  },
   ];
 
   return (
@@ -1796,11 +1539,9 @@ export default function MegaBank() {
             {onboardStep==="splash"     && <SplashScreen onNext={goSignup}/>}
             {onboardStep==="signup"     && <SignupScreen onNext={goVerify}/>}
             {onboardStep==="verify"     && <VerifyScreen onNext={goGenerating}/>}
-            {onboardStep==="generating" && <GeneratingScreen onDone={goSeed}/>}
-            {onboardStep==="seed"       && <SeedScreen onNext={goConfirm}/>}
-            {onboardStep==="confirm"    && <ConfirmSeedScreen onNext={goReady}/>}
+            {onboardStep==="generating" && <GeneratingScreen onDone={goReady}/>}
             {onboardStep==="ready"      && (
-              <WalletReadyScreen userName={userName} walletAddress={walletAddr} onEnter={enterApp}/>
+              <AccountReadyScreen userName={userName} onEnter={enterApp}/>
             )}
           </div>
         )}
@@ -1840,9 +1581,9 @@ export default function MegaBank() {
           <div key={screen} style={{ height:640, overflowY:"auto", paddingTop:4 }}>
             {screen==="home"    && <HomeScreen    {...sharedProps} prices={prices} yieldAccum={yieldAccum}/>}
             {screen==="cards"   && <CardsScreen   {...sharedProps}/>}
-            {screen==="yield"   && <YieldScreen   state={state} yieldAccum={yieldAccum}/>}
+            {screen==="earn"    && <EarnScreen    state={state} yieldAccum={yieldAccum}/>}
             {screen==="deposit" && <DepositScreen {...sharedProps}/>}
-            {screen==="risk"    && <RiskScreen    {...sharedProps}/>}
+            {screen==="credit"  && <CreditScreen  {...sharedProps}/>}
           </div>
 
           {/* Toast */}
